@@ -7,10 +7,15 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node / Vite
 node_modules
 dist
 dist-ssr
 *.local
+
+# Environment variables
+.env
+.env.*
 
 # Editor directories and files
 .vscode/*
@@ -22,4 +27,25 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
+
+# Mars terrain / generated data
+*.IMG
+*.JP2
+*.tif
+*.tiff
+*.npy
+*.bin
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# C++ build output
+*.exe
+*.out
+*.o
+*.obj
+
+# OS junk
+Thumbs.db

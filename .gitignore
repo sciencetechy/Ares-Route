@@ -1,0 +1,22 @@
+# Mars terrain / generated data
+*.IMG
+*.JP2
+*.tif
+*.tiff
+*.npy
+*.bin
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# C++ build output
+*.exe
+*.out
+*.o
+*.obj
+
+# OS junk
+.DS_Store
+Thumbs.db
