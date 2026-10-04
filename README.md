@@ -3,11 +3,7 @@
 Ares-Route is a Mars rover route planner that uses real HiRISE elevation data and A* pathfinding to generate safer routes across the Martian surface.
 
 ## Demo
-
-Add a screenshot or GIF here showing:
-- the Mars globe
-- selected start and destination points
-- the generated route
+Check Ares-Route Devpost for images and Video Demo: https://devpost.com/software/blah-blah-6vgrdz
 
 ## What it does
 
