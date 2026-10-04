@@ -12,6 +12,7 @@ import {
   Cartesian3,
   Color,
   PolylineOutlineMaterialProperty,
+  PolylineDashMaterialProperty,
   Math as CesiumMath,
   Rectangle,
   ImageMaterialProperty,
@@ -134,6 +135,7 @@ function App() {
     let startMarker = null;
     let endMarker = null;
     let routeEntity = null;
+    let straightLineEntity = null;
 
 
     function clearRoute() {
@@ -150,6 +152,11 @@ function App() {
       if (routeEntity) {
         viewer.entities.remove(routeEntity);
         routeEntity = null;
+      }
+
+      if (straightLineEntity) {
+        viewer.entities.remove(straightLineEntity);
+        straightLineEntity = null;
       }
 
       startPoint = null;
@@ -517,6 +524,82 @@ function App() {
               });
 
 
+            // --------------------------------
+            // Straight-line comparison
+            // --------------------------------
+
+            const STRAIGHT_SAMPLES = 100;
+
+            const straightRawPositions = [];
+
+            for (let i = 0; i <= STRAIGHT_SAMPLES; i++) {
+              const t = i / STRAIGHT_SAMPLES;
+
+              const lon =
+                startPoint.longitude +
+                (
+                  endPoint.longitude -
+                  startPoint.longitude
+                ) * t;
+
+              const lat =
+                startPoint.latitude +
+                (
+                  endPoint.latitude -
+                  startPoint.latitude
+                ) * t;
+
+              straightRawPositions.push(
+                Cartesian3.fromDegrees(
+                  lon,
+                  lat,
+                  0,
+                  Ellipsoid.MARS
+                )
+              );
+            }
+
+            const straightClampedPositions =
+              await viewer.scene.clampToHeightMostDetailed(
+                straightRawPositions
+              );
+
+            const straightVisiblePositions =
+              straightClampedPositions.map(
+                (position) =>
+                  raiseAboveSurface(
+                    position,
+                    5
+                  )
+              );
+
+            if (straightLineEntity) {
+              viewer.entities.remove(
+                straightLineEntity
+              );
+            }
+
+            straightLineEntity =
+              viewer.entities.add({
+                polyline: {
+                  positions:
+                    straightVisiblePositions,
+
+                  width: 3,
+
+                  material:
+                    new PolylineDashMaterialProperty({
+                      color:
+                        Color.fromCssColorString(
+                          "#f2e6e3"
+                        ).withAlpha(0.65),
+
+                      dashLength: 14,
+                    }),
+                },
+              });
+
+
             setRouteStats({
               nodes: data.nodes,
 
@@ -534,6 +617,18 @@ function App() {
 
               maxSlope:
                 data.maxSlope ?? null,
+
+              straightDistance:
+                data.straightDistance ?? null,
+
+              straightMaxSlope:
+                data.straightMaxSlope ?? null,
+
+              straightCost:
+                data.straightCost ?? null,
+
+              straightSafe:
+                data.straightSafe ?? null,
             });
 
           } catch (error) {
@@ -1462,16 +1557,260 @@ function App() {
             {whyOpen && (
               <div
                 style={{
-                  minHeight: "70px",
-
                   padding:
-                    "0 17px 17px",
+                    "16px 17px 18px",
 
                   borderTop:
                     "1px solid rgba(255,255,255,0.05)",
                 }}
               >
-                {/* Empty for now */}
+
+                {!routeStats ? (
+                  <div
+                    style={{
+                      color: "#827573",
+                      fontSize: "12px",
+                      lineHeight: "1.5",
+                    }}
+                  >
+                    Calculate a route first to compare it
+                    with the direct path.
+                  </div>
+                ) : (
+                  <>
+                    {/* Labels */}
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "1fr 1fr",
+                        gap: "12px",
+                        marginBottom: "16px",
+                      }}
+                    >
+
+                      <div>
+                        <div
+                          style={{
+                            color: "#8c7d7b",
+                            fontSize: "10px",
+                            textTransform:
+                              "uppercase",
+                            letterSpacing:
+                              "0.7px",
+                            marginBottom: "5px",
+                          }}
+                        >
+                          Straight
+                        </div>
+
+                        <div
+                          style={{
+                            color: "#f0e7e5",
+                            fontSize: "16px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          {routeStats.straightDistance !== null
+                            ? `${(
+                                routeStats.straightDistance /
+                                1000
+                              ).toFixed(2)} km`
+                            : "—"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            color: "#8c7d7b",
+                            fontSize: "10px",
+                            textTransform:
+                              "uppercase",
+                            letterSpacing:
+                              "0.7px",
+                            marginBottom: "5px",
+                          }}
+                        >
+                          Ares
+                        </div>
+
+                        <div
+                          style={{
+                            color: "#ff6b61",
+                            fontSize: "16px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          {routeStats.distance !== null
+                            ? `${(
+                                routeStats.distance /
+                                1000
+                              ).toFixed(2)} km`
+                            : "—"}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Max slope comparison */}
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "1fr 1fr",
+                        gap: "12px",
+
+                        paddingTop: "13px",
+
+                        borderTop:
+                          "1px solid rgba(255,255,255,0.05)",
+
+                        marginBottom: "16px",
+                      }}
+                    >
+
+                      <div>
+                        <div
+                          style={{
+                            color: "#756866",
+                            fontSize: "10px",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          max slope
+                        </div>
+
+                        <div
+                          style={{
+                            color:
+                              routeStats.straightSafe === false
+                                ? "#ff6b61"
+                                : "#ddd3d1",
+
+                            fontSize: "14px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          {routeStats.straightMaxSlope !== null
+                            ? `${routeStats.straightMaxSlope.toFixed(
+                                1
+                              )}°`
+                            : "—"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div
+                          style={{
+                            color: "#756866",
+                            fontSize: "10px",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          max slope
+                        </div>
+
+                        <div
+                          style={{
+                            color: "#ddd3d1",
+                            fontSize: "14px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          {routeStats.maxSlope !== null
+                            ? `${routeStats.maxSlope.toFixed(
+                                1
+                              )}°`
+                            : "—"}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Explanation */}
+
+                    <div
+                      style={{
+                        color: "#a99b99",
+
+                        fontSize: "12px",
+
+                        lineHeight: "1.55",
+                      }}
+                    >
+
+                      {routeStats.straightSafe === false ? (
+                        <>
+                          The direct path crosses terrain
+                          that exceeds the{" "}
+
+                          <span
+                            style={{
+                              color: "#ff6b61",
+                            }}
+                          >
+                            25° slope limit
+                          </span>
+
+                          . Ares Route takes a longer path
+                          to stay on traversable terrain.
+                        </>
+                      ) : (
+                        <>
+                          The direct path is traversable,
+                          but Ares Route reduces exposure
+                          to steep terrain by optimizing
+                          terrain-weighted cost.
+                        </>
+                      )}
+
+                    </div>
+
+                    {/* Extra distance */}
+
+                    {routeStats.distance !== null &&
+                      routeStats.straightDistance !== null && (
+                        <div
+                          style={{
+                            marginTop: "14px",
+
+                            paddingTop: "13px",
+
+                            borderTop:
+                              "1px solid rgba(255,255,255,0.05)",
+
+                            color: "#6f6260",
+
+                            fontSize: "11px",
+                          }}
+                        >
+                          Route adds{" "}
+
+                          <span
+                            style={{
+                              color: "#bcaeac",
+                            }}
+                          >
+                            {Math.max(
+                              0,
+                              (
+                                routeStats.distance -
+                                routeStats.straightDistance
+                              ) / 1000
+                            ).toFixed(2)}{" "}
+                            km
+                          </span>
+
+                          {" "}to avoid worse terrain.
+                        </div>
+                      )}
+
+                  </>
+                )}
+
               </div>
             )}
 

@@ -89,7 +89,6 @@ def lonlat_to_grid(lon, lat):
 # ---------------------------------
 
 def grid_to_lonlat(grid_row, grid_col):
-
     if (
         grid_row < 0 or grid_row >= GRID_ROWS or
         grid_col < 0 or grid_col >= GRID_COLS
@@ -118,7 +117,6 @@ def grid_to_lonlat(grid_row, grid_col):
 
 @app.route("/route", methods=["POST"])
 def route():
-
     data = request.get_json()
 
     start = data["start"]
@@ -163,9 +161,7 @@ def route():
             str(target_row),
             str(target_col)
         ],
-
         cwd=ROOT,
-
         capture_output=True,
         text=True
     )
@@ -176,7 +172,6 @@ def route():
 
 
     if result.returncode != 0:
-
         print("A* stdout:")
         print(result.stdout)
 
@@ -211,6 +206,11 @@ def route():
     weighted_cost = None
     max_slope = None
 
+    straight_distance = None
+    straight_max_slope = None
+    straight_cost = None
+    straight_safe = None
+
 
     for line in lines:
 
@@ -241,6 +241,37 @@ def route():
         elif line.startswith("Max slope:"):
             max_slope = float(
                 line.split(":", 1)[1].strip()
+            )
+
+        elif line.startswith("Straight distance:"):
+            value = line.split(":", 1)[1].strip()
+
+            value = value.replace(
+                "meters",
+                ""
+            ).strip()
+
+            straight_distance = float(value)
+
+        elif line.startswith("Straight max slope:"):
+            straight_max_slope = float(
+                line.split(":", 1)[1].strip()
+            )
+
+        elif line.startswith("Straight terrain cost:"):
+            straight_cost = float(
+                line.split(":", 1)[1].strip()
+            )
+
+        elif line.startswith("Straight safe:"):
+            value = (
+                line.split(":", 1)[1]
+                .strip()
+                .lower()
+            )
+
+            straight_safe = (
+                value == "true"
             )
 
 
@@ -283,7 +314,6 @@ def route():
     route_points = []
 
     for row, col in grid_path:
-
         result_point = grid_to_lonlat(
             row,
             col
@@ -328,12 +358,19 @@ def route():
 
         "maxSlope": max_slope,
 
+        "straightDistance": straight_distance,
+
+        "straightMaxSlope": straight_max_slope,
+
+        "straightCost": straight_cost,
+
+        "straightSafe": straight_safe,
+
         "path": route_points
     })
 
 
 if __name__ == "__main__":
-
     app.run(
         host="127.0.0.1",
         port=5000,
