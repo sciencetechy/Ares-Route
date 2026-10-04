@@ -2,6 +2,7 @@ import rasterio
 from rasterio.windows import Window
 from rasterio.enums import Resampling
 from PIL import Image
+import numpy as np
 
 DTM_PATH = "data/DTEEC_048842_1985_048908_1985_U01.IMG"
 ORTHO_PATH = "data/ESP_048842_1985_RED_A_01_ORTHO.JP2"
@@ -78,7 +79,7 @@ with rasterio.open(ORTHO_PATH) as ortho:
         height=source_height
     )
 
-    # Read directly into smaller array
+    # Read directly into the smaller output size
     data = ortho.read(
         1,
         window=window,
@@ -91,7 +92,35 @@ with rasterio.open(ORTHO_PATH) as ortho:
 
     print("Extracted shape:", data.shape)
 
-    image = Image.fromarray(data)
+    # --------------------------------------------------
+    # Convert grayscale image to RGBA
+    # --------------------------------------------------
+
+    gray = data.astype(np.uint8)
+
+    rgba = np.zeros(
+        (OUTPUT_HEIGHT, OUTPUT_WIDTH, 4),
+        dtype=np.uint8
+    )
+
+    # Grayscale -> RGB
+    rgba[:, :, 0] = gray
+    rgba[:, :, 1] = gray
+    rgba[:, :, 2] = gray
+
+    # Missing HiRISE area is stored as black (value 0)
+    # Make those pixels transparent
+    rgba[:, :, 3] = np.where(
+        gray == 0,
+        0,
+        255
+    ).astype(np.uint8)
+
+    # Save as RGBA PNG
+    image = Image.fromarray(
+        rgba,
+        mode="RGBA"
+    )
 
     image.save(
         OUTPUT_PATH,

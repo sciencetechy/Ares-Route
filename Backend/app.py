@@ -3,6 +3,7 @@ from flask_cors import CORS
 
 import subprocess
 import rasterio
+import time
 
 from pathlib import Path
 from pyproj import Transformer
@@ -71,7 +72,6 @@ def lonlat_to_grid(lon, lat):
     local_row = raw_row - START_ROW
     local_col = raw_col - START_COL
 
-    # Make sure point is inside the 6 km x 14 km routing region
     if (
         local_row < 0 or local_row >= HEIGHT or
         local_col < 0 or local_col >= WIDTH
@@ -99,7 +99,6 @@ def grid_to_lonlat(grid_row, grid_col):
     raw_row = START_ROW + grid_row * BLOCK_SIZE
     raw_col = START_COL + grid_col * BLOCK_SIZE
 
-    # Center of the ~2m x ~2m routing cell
     center_row = raw_row + BLOCK_SIZE / 2
     center_col = raw_col + BLOCK_SIZE / 2
 
@@ -119,6 +118,7 @@ def grid_to_lonlat(grid_row, grid_col):
 
 @app.route("/route", methods=["POST"])
 def route():
+
     data = request.get_json()
 
     start = data["start"]
@@ -134,10 +134,13 @@ def route():
         end["latitude"]
     )
 
+
     if start_grid is None or end_grid is None:
         return jsonify({
-            "error": "Start or destination is outside the routing region"
+            "error":
+                "Start or destination is outside the routing region"
         }), 400
+
 
     start_row, start_col = start_grid
     target_row, target_col = end_grid
@@ -145,9 +148,12 @@ def route():
     print("Start grid:", start_grid)
     print("Target grid:", end_grid)
 
+
     # ---------------------------------
     # Run C++ A*
     # ---------------------------------
+
+    start_time = time.perf_counter()
 
     result = subprocess.run(
         [
@@ -157,25 +163,42 @@ def route():
             str(target_row),
             str(target_col)
         ],
+
         cwd=ROOT,
+
         capture_output=True,
         text=True
     )
 
+    computation_time = (
+        time.perf_counter() - start_time
+    )
+
+
     if result.returncode != 0:
+
         print("A* stdout:")
         print(result.stdout)
 
         print("A* stderr:")
         print(result.stderr)
 
+        error_details = result.stderr.strip()
+
+        if "outside valid terrain" in error_details:
+            return jsonify({
+                "error":
+                    "Start or destination is in an area with no valid terrain data."
+            }), 400
+
         return jsonify({
             "error": "A* failed",
-            "details": result.stderr.strip()
+            "details": error_details
         }), 500
 
+
     # ---------------------------------
-    # Read path from C++ output
+    # Read C++ output
     # ---------------------------------
 
     lines = result.stdout.splitlines()
@@ -183,7 +206,48 @@ def route():
     path_started = False
     grid_path = []
 
+    expanded_nodes = None
+    actual_distance = None
+    weighted_cost = None
+    max_slope = None
+
+
     for line in lines:
+
+        # ---------------------------------
+        # Read statistics
+        # ---------------------------------
+
+        if line.startswith("Expanded nodes:"):
+            expanded_nodes = int(
+                line.split(":", 1)[1].strip()
+            )
+
+        elif line.startswith("Actual distance:"):
+            value = line.split(":", 1)[1].strip()
+
+            value = value.replace(
+                "meters",
+                ""
+            ).strip()
+
+            actual_distance = float(value)
+
+        elif line.startswith("Terrain-weighted cost:"):
+            weighted_cost = float(
+                line.split(":", 1)[1].strip()
+            )
+
+        elif line.startswith("Max slope:"):
+            max_slope = float(
+                line.split(":", 1)[1].strip()
+            )
+
+
+        # ---------------------------------
+        # Read path
+        # ---------------------------------
+
         if line == "PATH_BEGIN":
             path_started = True
             continue
@@ -192,13 +256,25 @@ def route():
             break
 
         if path_started:
-            row, col = map(int, line.split())
-            grid_path.append((row, col))
+            row, col = map(
+                int,
+                line.split()
+            )
+
+            grid_path.append(
+                (row, col)
+            )
+
+
+    # ---------------------------------
+    # No path
+    # ---------------------------------
 
     if not grid_path:
         return jsonify({
             "error": "No path found"
         }), 404
+
 
     # ---------------------------------
     # Convert path back to lon/lat
@@ -207,7 +283,11 @@ def route():
     route_points = []
 
     for row, col in grid_path:
-        result_point = grid_to_lonlat(row, col)
+
+        result_point = grid_to_lonlat(
+            row,
+            col
+        )
 
         if result_point is None:
             continue
@@ -219,7 +299,13 @@ def route():
             "latitude": lat
         })
 
+
+    # ---------------------------------
+    # Response
+    # ---------------------------------
+
     return jsonify({
+
         "startGrid": {
             "row": start_row,
             "col": start_col
@@ -232,11 +318,22 @@ def route():
 
         "nodes": len(route_points),
 
+        "distance": actual_distance,
+
+        "weightedCost": weighted_cost,
+
+        "expanded": expanded_nodes,
+
+        "computationTime": computation_time,
+
+        "maxSlope": max_slope,
+
         "path": route_points
     })
 
 
 if __name__ == "__main__":
+
     app.run(
         host="127.0.0.1",
         port=5000,

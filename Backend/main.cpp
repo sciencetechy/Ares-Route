@@ -312,6 +312,43 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    double maxSlope = 0.0;
+
+    for (size_t i = 1; i < path.size(); i++) {
+        int prev = path[i - 1];
+        int curr = path[i];
+
+        int prevRow = prev / COLS;
+        int prevCol = prev % COLS;
+
+        int currRow = curr / COLS;
+        int currCol = curr % COLS;
+
+        bool diagonal =
+            prevRow != currRow &&
+            prevCol != currCol;
+
+        double distance;
+
+        if (diagonal) {
+            distance = CELL_SIZE * sqrt(2.0);
+        } else {
+            distance = CELL_SIZE;
+        }
+
+        double deltaHeight =
+            elevation[curr] - elevation[prev];
+
+        double slopeAngle =
+            atan(deltaHeight / distance) *
+            180.0 / PI;
+
+        maxSlope = max(
+            maxSlope,
+            abs(slopeAngle)
+        );
+    }
+
     // ---------------------------------
     // Output
     // ---------------------------------
@@ -324,7 +361,8 @@ int main(int argc, char* argv[]) {
     cout << "Terrain-weighted cost: "
          << gCost[targetId]
          << "\n";
-
+    cout << "Max slope: " << maxSlope << "\n";
+    
     cout << "PATH_BEGIN\n";
 
     for (int nodeId : path) {

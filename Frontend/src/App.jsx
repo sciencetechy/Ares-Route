@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Viewer,
@@ -19,9 +19,16 @@ import {
 
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
+
 function App() {
   const cesiumContainer = useRef(null);
   const viewerRef = useRef(null);
+  const resetRouteRef = useRef(null);
+
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [routeStats, setRouteStats] = useState(null);
+
 
   // --------------------------------
   // Routing region: ~6 km x 14 km
@@ -33,10 +40,14 @@ function App() {
   const MIN_LAT = 18.344627121160055;
   const MAX_LAT = 18.580875304369517;
 
-  const ROUTING_CENTER_LON = (MIN_LON + MAX_LON) / 2;
-  const ROUTING_CENTER_LAT = (MIN_LAT + MAX_LAT) / 2;
+  const ROUTING_CENTER_LON =
+    (MIN_LON + MAX_LON) / 2;
+
+  const ROUTING_CENTER_LAT =
+    (MIN_LAT + MAX_LAT) / 2;
 
   const ROUTING_CAMERA_HEIGHT = 18000;
+
 
   function zoomToRoutingArea() {
     const viewer = viewerRef.current;
@@ -56,6 +67,18 @@ function App() {
     });
   }
 
+
+  function resetRoute() {
+    if (resetRouteRef.current) {
+      resetRouteRef.current();
+    }
+
+    setLoading(false);
+    setErrorMessage("");
+    setRouteStats(null);
+  }
+
+
   function raiseAboveSurface(cartesian, meters = 4) {
     const cartographic = Cartographic.fromCartesian(
       cartesian,
@@ -70,19 +93,24 @@ function App() {
     );
   }
 
+
   useEffect(() => {
-    Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_TOKEN;
+    Ion.defaultAccessToken =
+      import.meta.env.VITE_CESIUM_TOKEN;
 
     Ellipsoid.default = Ellipsoid.MARS;
 
-    const viewer = new Viewer(cesiumContainer.current, {
-      globe: false,
-      sceneModePicker: false,
-      baseLayerPicker: false,
-      geocoder: false,
-      animation: false,
-      timeline: false,
-    });
+    const viewer = new Viewer(
+      cesiumContainer.current,
+      {
+        globe: false,
+        sceneModePicker: false,
+        baseLayerPicker: false,
+        geocoder: false,
+        animation: false,
+        timeline: false,
+      }
+    );
 
     viewerRef.current = viewer;
 
@@ -93,98 +121,143 @@ function App() {
     let endMarker = null;
     let routeEntity = null;
 
+
+    function clearRoute() {
+      if (startMarker) {
+        viewer.entities.remove(startMarker);
+        startMarker = null;
+      }
+
+      if (endMarker) {
+        viewer.entities.remove(endMarker);
+        endMarker = null;
+      }
+
+      if (routeEntity) {
+        viewer.entities.remove(routeEntity);
+        routeEntity = null;
+      }
+
+      startPoint = null;
+      endPoint = null;
+    }
+
+
+    resetRouteRef.current = clearRoute;
+
+
     async function loadMars() {
       try {
         const marsTileset =
-          await Cesium3DTileset.fromIonAssetId(3644333);
+          await Cesium3DTileset.fromIonAssetId(
+            3644333
+          );
 
         viewer.scene.primitives.add(marsTileset);
 
+
         // --------------------------------
-        // Draw routing area
+        // HiRISE image overlay
         // --------------------------------
+
         viewer.entities.add({
           rectangle: {
-            coordinates: Rectangle.fromDegrees(
-              MIN_LON,
-              MIN_LAT,
-              MAX_LON,
-              MAX_LAT
-            ),
+            coordinates:
+              Rectangle.fromDegrees(
+                MIN_LON,
+                MIN_LAT,
+                MAX_LON,
+                MAX_LAT
+              ),
 
-            material: new ImageMaterialProperty({
-              image: "/hirise_region.png",
-              transparent: false,
-            }),
+            material:
+              new ImageMaterialProperty({
+                image: "/hirise_region.png",
+                transparent: true,
+              }),
 
-            // Approximate height for now
+            // Approximate flat height for now
             height: -2590,
           },
         });
+
 
         // --------------------------------
         // Start zoomed into routing area
         // --------------------------------
 
         viewer.camera.flyTo({
-          destination: Cartesian3.fromDegrees(
-            ROUTING_CENTER_LON,
-            ROUTING_CENTER_LAT,
-            ROUTING_CAMERA_HEIGHT,
-            Ellipsoid.MARS
-          ),
+          destination:
+            Cartesian3.fromDegrees(
+              ROUTING_CENTER_LON,
+              ROUTING_CENTER_LAT,
+              ROUTING_CAMERA_HEIGHT,
+              Ellipsoid.MARS
+            ),
+
           duration: 1.5,
         });
+
       } catch (error) {
-        console.error("Failed to load Mars:", error);
+        console.error(
+          "Failed to load Mars:",
+          error
+        );
+
+        setErrorMessage(
+          "Failed to load Mars terrain."
+        );
       }
     }
 
+
     loadMars();
 
-    const handler = new ScreenSpaceEventHandler(
-      viewer.scene.canvas
-    );
+
+    const handler =
+      new ScreenSpaceEventHandler(
+        viewer.scene.canvas
+      );
+
 
     handler.setInputAction(
       async (click) => {
-        const cartesian = viewer.scene.pickPosition(
-          click.position
-        );
 
-        if (!cartesian) {
-          console.log(
-            "Could not determine clicked position."
-          );
+        if (loading) {
           return;
         }
 
-        const cartographic = Cartographic.fromCartesian(
-          cartesian,
-          Ellipsoid.MARS
-        );
+        const cartesian =
+          viewer.scene.pickPosition(
+            click.position
+          );
+
+        if (!cartesian) {
+          return;
+        }
+
+
+        const cartographic =
+          Cartographic.fromCartesian(
+            cartesian,
+            Ellipsoid.MARS
+          );
 
         if (!cartographic) {
           return;
         }
 
-        const longitude = CesiumMath.toDegrees(
-          cartographic.longitude
-        );
 
-        const latitude = CesiumMath.toDegrees(
-          cartographic.latitude
-        );
+        const longitude =
+          CesiumMath.toDegrees(
+            cartographic.longitude
+          );
 
-        console.log(
-          "Clicked Mars coordinate:",
-          longitude,
-          latitude
-        );
+        const latitude =
+          CesiumMath.toDegrees(
+            cartographic.latitude
+          );
 
-        // --------------------------------
-        // Check routing bounds
-        // --------------------------------
 
         const insideRoutingArea =
           longitude >= MIN_LON &&
@@ -192,15 +265,18 @@ function App() {
           latitude >= MIN_LAT &&
           latitude <= MAX_LAT;
 
+
         if (!insideRoutingArea) {
-          console.log(
-            "Click outside routing area:",
-            longitude,
-            latitude
+          setErrorMessage(
+            "Choose a point inside the routing area."
           );
 
           return;
         }
+
+
+        setErrorMessage("");
+
 
         // --------------------------------
         // First click = start
@@ -212,41 +288,50 @@ function App() {
             latitude,
           };
 
-          startMarker = viewer.entities.add({
-            position: raiseAboveSurface(
-              cartesian,
-              5
-            ),
 
-            point: {
-              pixelSize: 14,
-              color: Color.LIME,
-              outlineColor: Color.WHITE,
-              outlineWidth: 3,
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
+          startMarker =
+            viewer.entities.add({
 
-            label: {
-              text: "START",
-              font: "bold 14px sans-serif",
-              pixelOffset: new Cartesian2(
-                0,
-                -24
-              ),
-              fillColor: Color.WHITE,
-              outlineColor: Color.BLACK,
-              outlineWidth: 3,
-              style: 2,
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
-          });
+              position:
+                raiseAboveSurface(
+                  cartesian,
+                  5
+                ),
 
-          console.log("START:", startPoint);
+              point: {
+                pixelSize: 14,
+                color: Color.LIME,
+                outlineColor: Color.WHITE,
+                outlineWidth: 3,
+
+                disableDepthTestDistance:
+                  Number.POSITIVE_INFINITY,
+              },
+
+              label: {
+                text: "START",
+                font:
+                  "bold 14px sans-serif",
+
+                pixelOffset:
+                  new Cartesian2(
+                    0,
+                    -24
+                  ),
+
+                fillColor: Color.WHITE,
+                outlineColor: Color.BLACK,
+                outlineWidth: 3,
+                style: 2,
+
+                disableDepthTestDistance:
+                  Number.POSITIVE_INFINITY,
+              },
+            });
 
           return;
         }
+
 
         // --------------------------------
         // Second click = destination
@@ -258,97 +343,106 @@ function App() {
             latitude,
           };
 
-          endMarker = viewer.entities.add({
-            position: raiseAboveSurface(
-              cartesian,
-              5
-            ),
 
-            point: {
-              pixelSize: 14,
-              color: Color.RED,
-              outlineColor: Color.WHITE,
-              outlineWidth: 3,
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
+          endMarker =
+            viewer.entities.add({
 
-            label: {
-              text: "DESTINATION",
-              font: "bold 14px sans-serif",
-              pixelOffset: new Cartesian2(
-                0,
-                -24
-              ),
-              fillColor: Color.WHITE,
-              outlineColor: Color.BLACK,
-              outlineWidth: 3,
-              style: 2,
-              disableDepthTestDistance:
-                Number.POSITIVE_INFINITY,
-            },
-          });
+              position:
+                raiseAboveSurface(
+                  cartesian,
+                  5
+                ),
 
-          console.log(
-            "DESTINATION:",
-            endPoint
-          );
+              point: {
+                pixelSize: 14,
+                color: Color.RED,
+                outlineColor: Color.WHITE,
+                outlineWidth: 3,
 
-          console.log(
-            "ROUTE REQUEST:",
-            startPoint,
-            "->",
-            endPoint
-          );
+                disableDepthTestDistance:
+                  Number.POSITIVE_INFINITY,
+              },
+
+              label: {
+                text: "DESTINATION",
+
+                font:
+                  "bold 14px sans-serif",
+
+                pixelOffset:
+                  new Cartesian2(
+                    0,
+                    -24
+                  ),
+
+                fillColor: Color.WHITE,
+                outlineColor: Color.BLACK,
+                outlineWidth: 3,
+                style: 2,
+
+                disableDepthTestDistance:
+                  Number.POSITIVE_INFINITY,
+              },
+            });
+
+
+          setLoading(true);
+          setRouteStats(null);
+          setErrorMessage("");
+
 
           try {
-            const response = await fetch(
-              "http://127.0.0.1:5000/route",
-              {
-                method: "POST",
+            const response =
+              await fetch(
+                "/route",
+                {
+                  method: "POST",
 
-                headers: {
-                  "Content-Type":
-                    "application/json",
-                },
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
 
-                body: JSON.stringify({
-                  start: startPoint,
-                  end: endPoint,
-                }),
-              }
-            );
+                  body: JSON.stringify({
+                    start: startPoint,
+                    end: endPoint,
+                  }),
+                }
+              );
+
 
             const data =
               await response.json();
 
+
             if (!response.ok) {
-              console.error(
-                "Route error:",
-                data
+              setErrorMessage(
+                data.error ||
+                "Could not calculate route."
               );
+
               return;
             }
 
-            console.log(
-              "Route received:",
-              data
-            );
 
             const rawPositions =
-              data.path.map((point) =>
-                Cartesian3.fromDegrees(
-                  point.longitude,
-                  point.latitude,
-                  0,
-                  Ellipsoid.MARS
-                )
+              data.path.map(
+                (point) =>
+                  Cartesian3.fromDegrees(
+                    point.longitude,
+                    point.latitude,
+                    0,
+                    Ellipsoid.MARS
+                  )
               );
 
+
             const clampedPositions =
-              await viewer.scene.clampToHeightMostDetailed(
-                rawPositions
-              );
+              await viewer.scene
+                .clampToHeightMostDetailed(
+                  rawPositions
+                );
+
 
             const visibleRoutePositions =
               clampedPositions.map(
@@ -359,11 +453,13 @@ function App() {
                   )
               );
 
+
             if (routeEntity) {
               viewer.entities.remove(
                 routeEntity
               );
             }
+
 
             routeEntity =
               viewer.entities.add({
@@ -389,98 +485,122 @@ function App() {
                     ),
                 },
               });
+
+
+            // Backend already provides nodes.
+            // Other fields will be added next.
+            setRouteStats({
+              nodes: data.nodes,
+
+              distance:
+                data.distance ?? null,
+
+              weightedCost:
+                data.weightedCost ?? null,
+
+              expanded:
+                data.expanded ?? null,
+
+              computationTime:
+                data.computationTime ?? null,
+
+              maxSlope:
+                data.maxSlope ?? null,
+            });
+
           } catch (error) {
+
             console.error(
               "Failed to get route:",
               error
             );
+
+            setErrorMessage(
+              "Failed to contact routing backend."
+            );
+
+          } finally {
+            setLoading(false);
           }
+
 
           return;
         }
 
+
         // --------------------------------
-        // Third valid click resets
+        // Third click starts a new route
         // --------------------------------
 
-        if (startMarker) {
-          viewer.entities.remove(
-            startMarker
-          );
-        }
+        clearRoute();
 
-        if (endMarker) {
-          viewer.entities.remove(
-            endMarker
-          );
-        }
+        setRouteStats(null);
+        setErrorMessage("");
 
-        if (routeEntity) {
-          viewer.entities.remove(
-            routeEntity
-          );
-
-          routeEntity = null;
-        }
 
         startPoint = {
           longitude,
           latitude,
         };
 
-        endPoint = null;
 
         startMarker =
           viewer.entities.add({
-            position: raiseAboveSurface(
-              cartesian,
-              5
-            ),
+
+            position:
+              raiseAboveSurface(
+                cartesian,
+                5
+              ),
 
             point: {
               pixelSize: 14,
               color: Color.LIME,
               outlineColor: Color.WHITE,
               outlineWidth: 3,
+
               disableDepthTestDistance:
                 Number.POSITIVE_INFINITY,
             },
 
             label: {
               text: "START",
-              font: "bold 14px sans-serif",
-              pixelOffset: new Cartesian2(
-                0,
-                -24
-              ),
+
+              font:
+                "bold 14px sans-serif",
+
+              pixelOffset:
+                new Cartesian2(
+                  0,
+                  -24
+                ),
+
               fillColor: Color.WHITE,
               outlineColor: Color.BLACK,
               outlineWidth: 3,
               style: 2,
+
               disableDepthTestDistance:
                 Number.POSITIVE_INFINITY,
             },
           });
-
-        endMarker = null;
-
-        console.log(
-          "New START:",
-          startPoint
-        );
       },
 
       ScreenSpaceEventType.LEFT_CLICK
     );
 
+
     return () => {
       handler.destroy();
 
+      resetRouteRef.current = null;
       viewerRef.current = null;
 
       viewer.destroy();
     };
+
   }, []);
+
 
   return (
     <div
@@ -490,6 +610,7 @@ function App() {
         position: "relative",
       }}
     >
+
       <div
         ref={cesiumContainer}
         style={{
@@ -498,6 +619,7 @@ function App() {
         }}
       />
 
+
       <div
         style={{
           position: "absolute",
@@ -505,10 +627,11 @@ function App() {
           left: "20px",
           zIndex: 10,
 
-          width: "280px",
+          width: "290px",
           padding: "16px",
 
           background: "white",
+
           borderRadius: "12px",
 
           boxShadow:
@@ -518,22 +641,28 @@ function App() {
             "Arial, sans-serif",
         }}
       >
+
         <div
           style={{
             fontSize: "18px",
             fontWeight: "600",
+
             marginBottom: "8px",
+
             color: "#202124",
           }}
         >
           Ares Route
         </div>
 
+
         <div
           style={{
             fontSize: "14px",
             color: "#5f6368",
+
             marginBottom: "12px",
+
             lineHeight: "1.4",
           }}
         >
@@ -542,8 +671,129 @@ function App() {
           destination.
         </div>
 
+
+        {loading && (
+          <div
+            style={{
+              padding: "10px",
+              marginBottom: "12px",
+
+              background: "#f1f3f4",
+              borderRadius: "6px",
+
+              fontSize: "14px",
+              color: "#202124",
+
+              fontWeight: "600",
+            }}
+          >
+            Calculating route...
+          </div>
+        )}
+
+
+        {errorMessage && (
+          <div
+            style={{
+              padding: "10px",
+              marginBottom: "12px",
+
+              background: "#fce8e6",
+              borderRadius: "6px",
+
+              fontSize: "13px",
+              color: "#c5221f",
+            }}
+          >
+            {errorMessage}
+          </div>
+        )}
+
+
+        {routeStats && (
+          <div
+            style={{
+              padding: "10px",
+
+              marginBottom: "12px",
+
+              border:
+                "1px solid #dadce0",
+
+              borderRadius: "8px",
+
+              fontSize: "13px",
+
+              color: "#202124",
+
+              lineHeight: "1.6",
+            }}
+          >
+
+            <div>
+              <strong>Route nodes:</strong>{" "}
+              {routeStats.nodes}
+            </div>
+
+
+            {routeStats.distance !== null && (
+              <div>
+                <strong>Distance:</strong>{" "}
+                {(
+                  routeStats.distance / 1000
+                ).toFixed(2)}{" "}
+                km
+              </div>
+            )}
+
+            {routeStats.maxSlope !== null && (
+              <div>
+                <strong>Max slope:</strong>{" "}
+                {routeStats.maxSlope.toFixed(1)}°
+              </div>
+            )}
+
+            {routeStats.weightedCost !== null && (
+              <div>
+                <strong>
+                  Terrain cost:
+                </strong>{" "}
+                {routeStats.weightedCost.toFixed(
+                  1
+                )}
+              </div>
+            )}
+
+
+            {routeStats.expanded !== null && (
+              <div>
+                <strong>
+                  Expanded nodes:
+                </strong>{" "}
+                {routeStats.expanded.toLocaleString()}
+              </div>
+            )}
+
+
+            {routeStats.computationTime !== null && (
+              <div>
+                <strong>
+                  Compute time:
+                </strong>{" "}
+                {routeStats.computationTime.toFixed(
+                  2
+                )}{" "}
+                s
+              </div>
+            )}
+
+          </div>
+        )}
+
+
         <button
           onClick={zoomToRoutingArea}
+
           style={{
             width: "100%",
             padding: "10px",
@@ -558,13 +808,42 @@ function App() {
             fontWeight: "600",
 
             cursor: "pointer",
+
+            marginBottom: "8px",
           }}
         >
           Back to Routing Area
         </button>
+
+
+        <button
+          onClick={resetRoute}
+
+          style={{
+            width: "100%",
+            padding: "10px",
+
+            border:
+              "1px solid #dadce0",
+
+            borderRadius: "6px",
+
+            background: "white",
+            color: "#202124",
+
+            fontSize: "14px",
+            fontWeight: "600",
+
+            cursor: "pointer",
+          }}
+        >
+          Reset Route
+        </button>
+
       </div>
     </div>
   );
 }
+
 
 export default App;
