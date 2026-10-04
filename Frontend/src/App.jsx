@@ -876,7 +876,7 @@ function App() {
                 letterSpacing: "-5px",
               }}
             >
-              Ares Route
+              Ares <span style={{ color: "#ff5a4f" }}>Route</span>
             </h1>
 
 
