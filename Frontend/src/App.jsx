@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+
 import {
   Viewer,
   Ion,
@@ -22,14 +23,20 @@ function App() {
   const cesiumContainer = useRef(null);
   const viewerRef = useRef(null);
 
-  const ROUTING_CENTER_LON = 77.52278736;
-  const ROUTING_CENTER_LAT = 18.46275121;
+  // --------------------------------
+  // Routing region: ~6 km x 14 km
+  // --------------------------------
 
-  const MIN_LON = 77.51398423962716;
-  const MAX_LON = 77.53159048259516;
+  const MIN_LON = 77.47039202883163;
+  const MAX_LON = 77.5751826933907;
 
-  const MIN_LAT = 18.45424805037143;
-  const MAX_LAT = 18.47125437515814;
+  const MIN_LAT = 18.344627121160055;
+  const MAX_LAT = 18.580875304369517;
+
+  const ROUTING_CENTER_LON = (MIN_LON + MAX_LON) / 2;
+  const ROUTING_CENTER_LAT = (MIN_LAT + MAX_LAT) / 2;
+
+  const ROUTING_CAMERA_HEIGHT = 18000;
 
   function zoomToRoutingArea() {
     const viewer = viewerRef.current;
@@ -42,7 +49,7 @@ function App() {
       destination: Cartesian3.fromDegrees(
         ROUTING_CENTER_LON,
         ROUTING_CENTER_LAT,
-        2500,
+        ROUTING_CAMERA_HEIGHT,
         Ellipsoid.MARS
       ),
       duration: 1.5,
@@ -88,9 +95,14 @@ function App() {
 
     async function loadMars() {
       try {
-        const marsTileset = await Cesium3DTileset.fromIonAssetId(3644333);
+        const marsTileset =
+          await Cesium3DTileset.fromIonAssetId(3644333);
 
         viewer.scene.primitives.add(marsTileset);
+
+        // --------------------------------
+        // Draw routing area
+        // --------------------------------
         viewer.entities.add({
           rectangle: {
             coordinates: Rectangle.fromDegrees(
@@ -105,36 +117,20 @@ function App() {
               transparent: false,
             }),
 
-            // Slightly above the highest terrain in this crop
-            height: -2570,
+            // Approximate height for now
+            height: -2590,
           },
         });
 
-        // Draw routing area
-        viewer.entities.add({
-          polygon: {
-            hierarchy: Cartesian3.fromDegreesArray(
-              [
-                MIN_LON, MAX_LAT,
-                MAX_LON, MAX_LAT,
-                MAX_LON, MIN_LAT,
-                MIN_LON, MIN_LAT,
-              ],
-              Ellipsoid.MARS
-            ),
-
-            material: Color.YELLOW.withAlpha(0.03),
-            outline: true,
-            outlineColor: Color.YELLOW.withAlpha(0.7),
-          },
-        });
-
+        // --------------------------------
         // Start zoomed into routing area
+        // --------------------------------
+
         viewer.camera.flyTo({
           destination: Cartesian3.fromDegrees(
             ROUTING_CENTER_LON,
             ROUTING_CENTER_LAT,
-            2500,
+            ROUTING_CAMERA_HEIGHT,
             Ellipsoid.MARS
           ),
           duration: 1.5,
@@ -146,14 +142,20 @@ function App() {
 
     loadMars();
 
-    const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+    const handler = new ScreenSpaceEventHandler(
+      viewer.scene.canvas
+    );
 
     handler.setInputAction(
       async (click) => {
-        const cartesian = viewer.scene.pickPosition(click.position);
+        const cartesian = viewer.scene.pickPosition(
+          click.position
+        );
 
         if (!cartesian) {
-          console.log("Could not determine clicked position.");
+          console.log(
+            "Could not determine clicked position."
+          );
           return;
         }
 
@@ -166,14 +168,23 @@ function App() {
           return;
         }
 
-        const longitude = CesiumMath.toDegrees(cartographic.longitude);
-        const latitude = CesiumMath.toDegrees(cartographic.latitude);
+        const longitude = CesiumMath.toDegrees(
+          cartographic.longitude
+        );
+
+        const latitude = CesiumMath.toDegrees(
+          cartographic.latitude
+        );
 
         console.log(
           "Clicked Mars coordinate:",
           longitude,
           latitude
         );
+
+        // --------------------------------
+        // Check routing bounds
+        // --------------------------------
 
         const insideRoutingArea =
           longitude >= MIN_LON &&
@@ -202,25 +213,33 @@ function App() {
           };
 
           startMarker = viewer.entities.add({
-            position: raiseAboveSurface(cartesian, 5),
+            position: raiseAboveSurface(
+              cartesian,
+              5
+            ),
 
             point: {
               pixelSize: 14,
               color: Color.LIME,
               outlineColor: Color.WHITE,
               outlineWidth: 3,
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              disableDepthTestDistance:
+                Number.POSITIVE_INFINITY,
             },
 
             label: {
               text: "START",
               font: "bold 14px sans-serif",
-              pixelOffset: new Cartesian2(0, -24),
+              pixelOffset: new Cartesian2(
+                0,
+                -24
+              ),
               fillColor: Color.WHITE,
               outlineColor: Color.BLACK,
               outlineWidth: 3,
               style: 2,
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              disableDepthTestDistance:
+                Number.POSITIVE_INFINITY,
             },
           });
 
@@ -240,29 +259,40 @@ function App() {
           };
 
           endMarker = viewer.entities.add({
-            position: raiseAboveSurface(cartesian, 5),
+            position: raiseAboveSurface(
+              cartesian,
+              5
+            ),
 
             point: {
               pixelSize: 14,
               color: Color.RED,
               outlineColor: Color.WHITE,
               outlineWidth: 3,
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              disableDepthTestDistance:
+                Number.POSITIVE_INFINITY,
             },
 
             label: {
               text: "DESTINATION",
               font: "bold 14px sans-serif",
-              pixelOffset: new Cartesian2(0, -24),
+              pixelOffset: new Cartesian2(
+                0,
+                -24
+              ),
               fillColor: Color.WHITE,
               outlineColor: Color.BLACK,
               outlineWidth: 3,
               style: 2,
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              disableDepthTestDistance:
+                Number.POSITIVE_INFINITY,
             },
           });
 
-          console.log("DESTINATION:", endPoint);
+          console.log(
+            "DESTINATION:",
+            endPoint
+          );
 
           console.log(
             "ROUTE REQUEST:",
@@ -272,60 +302,98 @@ function App() {
           );
 
           try {
-            const response = await fetch("http://127.0.0.1:5000/route", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                start: startPoint,
-                end: endPoint,
-              }),
-            });
+            const response = await fetch(
+              "http://127.0.0.1:5000/route",
+              {
+                method: "POST",
 
-            const data = await response.json();
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
+
+                body: JSON.stringify({
+                  start: startPoint,
+                  end: endPoint,
+                }),
+              }
+            );
+
+            const data =
+              await response.json();
 
             if (!response.ok) {
-              console.error("Route error:", data);
+              console.error(
+                "Route error:",
+                data
+              );
               return;
             }
 
-            console.log("Route received:", data);
-
-            const rawPositions = data.path.map((point) =>
-              Cartesian3.fromDegrees(
-                point.longitude,
-                point.latitude,
-                0,
-                Ellipsoid.MARS
-              )
+            console.log(
+              "Route received:",
+              data
             );
+
+            const rawPositions =
+              data.path.map((point) =>
+                Cartesian3.fromDegrees(
+                  point.longitude,
+                  point.latitude,
+                  0,
+                  Ellipsoid.MARS
+                )
+              );
 
             const clampedPositions =
-              await viewer.scene.clampToHeightMostDetailed(rawPositions);
+              await viewer.scene.clampToHeightMostDetailed(
+                rawPositions
+              );
 
-            const visibleRoutePositions = clampedPositions.map((position) =>
-              raiseAboveSurface(position, 3)
-            );
+            const visibleRoutePositions =
+              clampedPositions.map(
+                (position) =>
+                  raiseAboveSurface(
+                    position,
+                    3
+                  )
+              );
 
             if (routeEntity) {
-              viewer.entities.remove(routeEntity);
+              viewer.entities.remove(
+                routeEntity
+              );
             }
 
-            routeEntity = viewer.entities.add({
-              polyline: {
-                positions: visibleRoutePositions,
-                width: 7,
+            routeEntity =
+              viewer.entities.add({
+                polyline: {
+                  positions:
+                    visibleRoutePositions,
 
-                material: new PolylineOutlineMaterialProperty({
-                  color: Color.fromCssColorString("#4285F4"),
-                  outlineColor: Color.WHITE,
-                  outlineWidth: 2,
-                }),
-              },
-            });
+                  width: 7,
+
+                  material:
+                    new PolylineOutlineMaterialProperty(
+                      {
+                        color:
+                          Color.fromCssColorString(
+                            "#4285F4"
+                          ),
+
+                        outlineColor:
+                          Color.WHITE,
+
+                        outlineWidth: 2,
+                      }
+                    ),
+                },
+              });
           } catch (error) {
-            console.error("Failed to get route:", error);
+            console.error(
+              "Failed to get route:",
+              error
+            );
           }
 
           return;
@@ -336,15 +404,22 @@ function App() {
         // --------------------------------
 
         if (startMarker) {
-          viewer.entities.remove(startMarker);
+          viewer.entities.remove(
+            startMarker
+          );
         }
 
         if (endMarker) {
-          viewer.entities.remove(endMarker);
+          viewer.entities.remove(
+            endMarker
+          );
         }
 
         if (routeEntity) {
-          viewer.entities.remove(routeEntity);
+          viewer.entities.remove(
+            routeEntity
+          );
+
           routeEntity = null;
         }
 
@@ -355,32 +430,44 @@ function App() {
 
         endPoint = null;
 
-        startMarker = viewer.entities.add({
-          position: raiseAboveSurface(cartesian, 5),
+        startMarker =
+          viewer.entities.add({
+            position: raiseAboveSurface(
+              cartesian,
+              5
+            ),
 
-          point: {
-            pixelSize: 14,
-            color: Color.LIME,
-            outlineColor: Color.WHITE,
-            outlineWidth: 3,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
+            point: {
+              pixelSize: 14,
+              color: Color.LIME,
+              outlineColor: Color.WHITE,
+              outlineWidth: 3,
+              disableDepthTestDistance:
+                Number.POSITIVE_INFINITY,
+            },
 
-          label: {
-            text: "START",
-            font: "bold 14px sans-serif",
-            pixelOffset: new Cartesian2(0, -24),
-            fillColor: Color.WHITE,
-            outlineColor: Color.BLACK,
-            outlineWidth: 3,
-            style: 2,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
-        });
+            label: {
+              text: "START",
+              font: "bold 14px sans-serif",
+              pixelOffset: new Cartesian2(
+                0,
+                -24
+              ),
+              fillColor: Color.WHITE,
+              outlineColor: Color.BLACK,
+              outlineWidth: 3,
+              style: 2,
+              disableDepthTestDistance:
+                Number.POSITIVE_INFINITY,
+            },
+          });
 
         endMarker = null;
 
-        console.log("New START:", startPoint);
+        console.log(
+          "New START:",
+          startPoint
+        );
       },
 
       ScreenSpaceEventType.LEFT_CLICK
@@ -423,9 +510,12 @@ function App() {
 
           background: "white",
           borderRadius: "12px",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
 
-          fontFamily: "Arial, sans-serif",
+          boxShadow:
+            "0 2px 12px rgba(0,0,0,0.25)",
+
+          fontFamily:
+            "Arial, sans-serif",
         }}
       >
         <div
@@ -447,7 +537,9 @@ function App() {
             lineHeight: "1.4",
           }}
         >
-          Click inside the routing area to choose a start point and destination.
+          Click inside the routing area
+          to choose a start point and
+          destination.
         </div>
 
         <button

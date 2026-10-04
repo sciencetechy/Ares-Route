@@ -8,8 +8,8 @@
 
 using namespace std;
 
-const int ROWS = 500;
-const int COLS = 500;
+const int ROWS = 6933;
+const int COLS = 2971;
 const double CELL_SIZE = 2.02;
 const double PI = acos(-1.0);
 
@@ -64,7 +64,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    file.read(reinterpret_cast<char*>(elevation.data()), elevation.size() * sizeof(float));
+    file.read(
+        reinterpret_cast<char*>(elevation.data()),
+        elevation.size() * sizeof(float)
+    );
 
     if (!file) {
         cerr << "Error reading elevation grid\n";
@@ -102,6 +105,17 @@ int main(int argc, char* argv[]) {
     int startId = getId(startRow, startCol);
     int targetId = getId(targetRow, targetCol);
 
+    // Missing elevation data cannot be used as start/end
+    if (std::isnan(elevation[startId])) {
+        cerr << "Start is outside valid terrain.\n";
+        return 1;
+    }
+
+    if (std::isnan(elevation[targetId])) {
+        cerr << "Target is outside valid terrain.\n";
+        return 1;
+    }
+
     // ---------------------------------
     // A* data
     // ---------------------------------
@@ -111,7 +125,6 @@ int main(int argc, char* argv[]) {
     vector<double> gCost(ROWS * COLS, INF);
     vector<int> parent(ROWS * COLS, -1);
 
-    // State comparison already makes this behave like a min-heap on f
     priority_queue<State> openSet;
 
     gCost[startId] = 0.0;
@@ -141,7 +154,14 @@ int main(int argc, char* argv[]) {
 
         int currentId = getId(row, col);
 
-        double expectedF = gCost[currentId] + heuristic(row, col, targetRow, targetCol);
+        // Missing terrain = blocked
+        if (std::isnan(elevation[currentId])) {
+            continue;
+        }
+
+        double expectedF =
+            gCost[currentId] +
+            heuristic(row, col, targetRow, targetCol);
 
         // Ignore stale priority queue entries
         if (current.f > expectedF + 1e-9) {
@@ -159,13 +179,23 @@ int main(int argc, char* argv[]) {
             int nextRow = row + dr[i];
             int nextCol = col + dc[i];
 
-            if (nextRow < 0 || nextRow >= ROWS || nextCol < 0 || nextCol >= COLS) {
+            if (
+                nextRow < 0 || nextRow >= ROWS ||
+                nextCol < 0 || nextCol >= COLS
+            ) {
                 continue;
             }
 
             int nextId = getId(nextRow, nextCol);
 
-            bool diagonal = dr[i] != 0 && dc[i] != 0;
+            // Missing elevation = blocked terrain
+            if (std::isnan(elevation[nextId])) {
+                continue;
+            }
+
+            bool diagonal =
+                dr[i] != 0 &&
+                dc[i] != 0;
 
             double distance;
 
@@ -179,25 +209,41 @@ int main(int argc, char* argv[]) {
             // Slope cost
             // ---------------------------------
 
-            double deltaHeight = elevation[nextId] - elevation[currentId];
+            double deltaHeight =
+                elevation[nextId] -
+                elevation[currentId];
 
-            double slopeAngle = atan(deltaHeight / distance) * 180.0 / PI;
+            double slopeAngle =
+                atan(deltaHeight / distance) *
+                180.0 / PI;
 
-            double multiplier = slopeMultiplier(slopeAngle);
+            double multiplier =
+                slopeMultiplier(slopeAngle);
 
             // Too steep
             if (multiplier < 0) {
                 continue;
             }
 
-            double moveCost = distance * multiplier;
-            double newG = gCost[currentId] + moveCost;
+            double moveCost =
+                distance * multiplier;
+
+            double newG =
+                gCost[currentId] +
+                moveCost;
 
             if (newG < gCost[nextId]) {
                 gCost[nextId] = newG;
                 parent[nextId] = currentId;
 
-                double f = newG + heuristic(nextRow, nextCol, targetRow, targetCol);
+                double f =
+                    newG +
+                    heuristic(
+                        nextRow,
+                        nextCol,
+                        targetRow,
+                        targetCol
+                    );
 
                 openSet.push({
                     nextRow,
@@ -214,7 +260,10 @@ int main(int argc, char* argv[]) {
     // Reconstruct path
     // ---------------------------------
 
-    if (targetId != startId && parent[targetId] == -1) {
+    if (
+        targetId != startId &&
+        parent[targetId] == -1
+    ) {
         cout << "No path found\n";
         return 0;
     }
@@ -251,10 +300,13 @@ int main(int argc, char* argv[]) {
         int currRow = curr / COLS;
         int currCol = curr % COLS;
 
-        bool diagonal = prevRow != currRow && prevCol != currCol;
+        bool diagonal =
+            prevRow != currRow &&
+            prevCol != currCol;
 
         if (diagonal) {
-            actualDistance += CELL_SIZE * sqrt(2.0);
+            actualDistance +=
+                CELL_SIZE * sqrt(2.0);
         } else {
             actualDistance += CELL_SIZE;
         }
@@ -266,8 +318,12 @@ int main(int argc, char* argv[]) {
 
     cout << "Path found\n";
     cout << "Nodes in path: " << path.size() << "\n";
-    cout << "Actual distance: " << actualDistance << " meters\n";
-    cout << "Terrain-weighted cost: " << gCost[targetId] << "\n";
+    cout << "Actual distance: "
+         << actualDistance
+         << " meters\n";
+    cout << "Terrain-weighted cost: "
+         << gCost[targetId]
+         << "\n";
 
     cout << "PATH_BEGIN\n";
 

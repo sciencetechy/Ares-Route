@@ -1,28 +1,38 @@
 import rasterio
 from rasterio.windows import Window
+from rasterio.enums import Resampling
 from PIL import Image
-import numpy as np
 
 DTM_PATH = "data/DTEEC_048842_1985_048908_1985_U01.IMG"
 ORTHO_PATH = "data/ESP_048842_1985_RED_A_01_ORTHO.JP2"
 
-START_ROW = 6887
-START_COL = 2977
-SIZE = 1000
+START_ROW = 454
+START_COL = 506
+
+HEIGHT = 13866
+WIDTH = 5942
 
 OUTPUT_PATH = "Frontend/public/hirise_region.png"
 
+# Target output resolution
+# Roughly 1 meter per pixel
+OUTPUT_WIDTH = 6000
+OUTPUT_HEIGHT = 14000
+
 
 # --------------------------------------------------
-# Get exact projected bounds of the existing DTM crop
+# Get exact projected bounds of the DTM crop
 # --------------------------------------------------
 
 with rasterio.open(DTM_PATH) as dtm:
-    left, top = dtm.transform * (START_COL, START_ROW)
+    left, top = dtm.transform * (
+        START_COL,
+        START_ROW
+    )
 
     right, bottom = dtm.transform * (
-        START_COL + SIZE,
-        START_ROW + SIZE
+        START_COL + WIDTH,
+        START_ROW + HEIGHT
     )
 
     print("DTM crop bounds:")
@@ -33,37 +43,59 @@ with rasterio.open(DTM_PATH) as dtm:
 
 
 # --------------------------------------------------
-# Convert those projected coordinates into
-# orthoimage pixel coordinates
+# Find matching orthoimage region
+# and downsample while reading
 # --------------------------------------------------
 
 with rasterio.open(ORTHO_PATH) as ortho:
-    top_row, left_col = ortho.index(left, top)
-    bottom_row, right_col = ortho.index(right, bottom)
+    top_row, left_col = ortho.index(
+        left,
+        top
+    )
 
-    print("\nOrtho crop:")
+    bottom_row, right_col = ortho.index(
+        right,
+        bottom
+    )
+
+    source_width = right_col - left_col
+    source_height = bottom_row - top_row
+
+    print("\nOriginal ortho region:")
     print("rows:", top_row, "to", bottom_row)
     print("cols:", left_col, "to", right_col)
+    print("source width:", source_width)
+    print("source height:", source_height)
 
-    width = right_col - left_col
-    height = bottom_row - top_row
-
-    print("width:", width)
-    print("height:", height)
+    print("\nDownsampled output:")
+    print("width:", OUTPUT_WIDTH)
+    print("height:", OUTPUT_HEIGHT)
 
     window = Window(
         col_off=left_col,
         row_off=top_row,
-        width=width,
-        height=height
+        width=source_width,
+        height=source_height
     )
 
-    data = ortho.read(1, window=window)
+    # Read directly into smaller array
+    data = ortho.read(
+        1,
+        window=window,
+        out_shape=(
+            OUTPUT_HEIGHT,
+            OUTPUT_WIDTH
+        ),
+        resampling=Resampling.bilinear
+    )
 
     print("Extracted shape:", data.shape)
 
-    # save as PNG
     image = Image.fromarray(data)
-    image.save(OUTPUT_PATH)
+
+    image.save(
+        OUTPUT_PATH,
+        optimize=True
+    )
 
     print("\nSaved to:", OUTPUT_PATH)

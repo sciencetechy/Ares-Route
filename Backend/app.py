@@ -26,13 +26,16 @@ CPP_PATH = ROOT / "Backend" / "ares_route.exe"
 # Routing-grid information
 # ---------------------------------
 
-START_ROW = 6887
-START_COL = 2977
+START_ROW = 454
+START_COL = 506
 
-SIZE = 1000
+HEIGHT = 13866
+WIDTH = 5942
+
 BLOCK_SIZE = 2
 
-GRID_SIZE = SIZE // BLOCK_SIZE
+GRID_ROWS = HEIGHT // BLOCK_SIZE   # 6933
+GRID_COLS = WIDTH // BLOCK_SIZE    # 2971
 
 
 # ---------------------------------
@@ -68,9 +71,10 @@ def lonlat_to_grid(lon, lat):
     local_row = raw_row - START_ROW
     local_col = raw_col - START_COL
 
+    # Make sure point is inside the 6 km x 14 km routing region
     if (
-        local_row < 0 or local_row >= SIZE or
-        local_col < 0 or local_col >= SIZE
+        local_row < 0 or local_row >= HEIGHT or
+        local_col < 0 or local_col >= WIDTH
     ):
         return None
 
@@ -85,9 +89,17 @@ def lonlat_to_grid(lon, lat):
 # ---------------------------------
 
 def grid_to_lonlat(grid_row, grid_col):
+
+    if (
+        grid_row < 0 or grid_row >= GRID_ROWS or
+        grid_col < 0 or grid_col >= GRID_COLS
+    ):
+        return None
+
     raw_row = START_ROW + grid_row * BLOCK_SIZE
     raw_col = START_COL + grid_col * BLOCK_SIZE
 
+    # Center of the ~2m x ~2m routing cell
     center_row = raw_row + BLOCK_SIZE / 2
     center_col = raw_col + BLOCK_SIZE / 2
 
@@ -151,10 +163,15 @@ def route():
     )
 
     if result.returncode != 0:
+        print("A* stdout:")
+        print(result.stdout)
+
+        print("A* stderr:")
         print(result.stderr)
 
         return jsonify({
-            "error": "A* failed"
+            "error": "A* failed",
+            "details": result.stderr.strip()
         }), 500
 
     # ---------------------------------
@@ -190,7 +207,12 @@ def route():
     route_points = []
 
     for row, col in grid_path:
-        lon, lat = grid_to_lonlat(row, col)
+        result_point = grid_to_lonlat(row, col)
+
+        if result_point is None:
+            continue
+
+        lon, lat = result_point
 
         route_points.append({
             "longitude": lon,

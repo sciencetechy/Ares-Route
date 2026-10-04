@@ -3,12 +3,16 @@ from pyproj import Transformer
 
 PATH = "data/DTEEC_048842_1985_048908_1985_U01.IMG"
 
-START_ROW = 6887
-START_COL = 2977
-SIZE = 1000
+START_ROW = 454
+START_COL = 506
+
+HEIGHT = 13866
+WIDTH = 5942
+
 BLOCK_SIZE = 2
 
-GRID_SIZE = SIZE // BLOCK_SIZE
+GRID_ROWS = HEIGHT // BLOCK_SIZE   # 6933
+GRID_COLS = WIDTH // BLOCK_SIZE    # 2971
 
 
 with rasterio.open(PATH) as src:
@@ -40,18 +44,18 @@ with rasterio.open(PATH) as src:
         raw_row, raw_col = src.index(x, y)
 
         # Convert from full DTM coordinates
-        # into our 1000 x 1000 crop
+        # into our 6 km x 14 km crop
         local_row = raw_row - START_ROW
         local_col = raw_col - START_COL
 
         # Make sure point is inside our crop
         if (
-            local_row < 0 or local_row >= SIZE or
-            local_col < 0 or local_col >= SIZE
+            local_row < 0 or local_row >= HEIGHT or
+            local_col < 0 or local_col >= WIDTH
         ):
             return None
 
-        # Raw pixels -> 2 m routing cells
+        # Raw pixels -> ~2 m routing cells
         grid_row = local_row // BLOCK_SIZE
         grid_col = local_col // BLOCK_SIZE
 
@@ -60,11 +64,18 @@ with rasterio.open(PATH) as src:
 
     def grid_to_lonlat(grid_row, grid_col):
 
+        # Make sure routing cell is valid
+        if (
+            grid_row < 0 or grid_row >= GRID_ROWS or
+            grid_col < 0 or grid_col >= GRID_COLS
+        ):
+            return None
+
         # Start of this routing cell in the full DTM
         raw_row = START_ROW + grid_row * BLOCK_SIZE
         raw_col = START_COL + grid_col * BLOCK_SIZE
 
-        # Use CENTER of the 2 x 2 routing cell
+        # Use center of the 2 x 2 routing cell
         center_row = raw_row + BLOCK_SIZE / 2
         center_col = raw_col + BLOCK_SIZE / 2
 
@@ -79,11 +90,14 @@ with rasterio.open(PATH) as src:
 
 corners = [
     (0, 0),
-    (0, 499),
-    (499, 499),
-    (499, 0)
+    (0, GRID_COLS - 1),
+    (GRID_ROWS - 1, GRID_COLS - 1),
+    (GRID_ROWS - 1, 0)
 ]
 
 for row, col in corners:
-    lon, lat = grid_to_lonlat(row, col)
-    print(row, col, "->", lon, lat)
+    result = grid_to_lonlat(row, col)
+
+    if result is not None:
+        lon, lat = result
+        print(row, col, "->", lon, lat)
