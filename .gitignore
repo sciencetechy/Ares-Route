@@ -1,22 +1,61 @@
-# Mars terrain / generated data
+# HiRISE / terrain source data
 *.IMG
 *.JP2
 *.tif
 *.tiff
+
+# Generated terrain data
 *.npy
 *.bin
+
+# Generated HiRISE frontend image
+Frontend/public/hirise_region.png
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+venv/
+.venv/
+env/
 
 # C++ build output
 *.exe
 *.out
 *.o
 *.obj
+*.a
+*.lib
 
-# OS junk
+# Node
+node_modules/
+dist/
+dist-ssr/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editors / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
 .DS_Store
 Thumbs.db

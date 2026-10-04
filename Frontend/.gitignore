@@ -1,19 +1,15 @@
-# Node
-node_modules/
-dist/
-dist-ssr/
-
-# Environment
-.env
-.env.*
-
-# Mars terrain / generated data
+# HiRISE / terrain source data
 *.IMG
 *.JP2
 *.tif
 *.tiff
+
+# Generated terrain data
 *.npy
 *.bin
+
+# Generated HiRISE frontend image
+Frontend/public/hirise_region.png
 
 # Python
 __pycache__/
@@ -32,6 +28,15 @@ env/
 *.a
 *.lib
 
+# Node
+node_modules/
+dist/
+dist-ssr/
+
+# Environment files
+.env
+.env.*
+
 # Logs
 logs/
 *.log
@@ -41,7 +46,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Editors
+# Editors / IDE
 .vscode/*
 !.vscode/extensions.json
 .idea/
@@ -51,6 +56,6 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
